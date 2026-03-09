@@ -1,8 +1,8 @@
 # Ahrefs MCP Proxy
 
-> **This is not an issue with Ahrefs.** The Ahrefs MCP server is well-built and works correctly. The problem is that Claude.ai's MCP connector attempts OAuth 2.1 authentication, while the Ahrefs server uses Bearer token auth. Claude is unlikely to change this behavior, and Ahrefs has declined to implement OAuth on their end, pointing to Claude as the responsible party. Neither side is fixing it. This project is a workaround until one of them does.
+> **This is not an Ahrefs problem.** Ahrefs has an official Claude connector with a full OAuth flow — workspace selection, consent screen, the works. The Ahrefs MCP server itself is well-built and works correctly when called directly. The problem is that the OAuth integration between Claude.ai and Ahrefs is unreliable. It works for some users, breaks for others, and can stop working after initially connecting. Ahrefs says it's Claude's issue. Anthropic hasn't fixed it. Neither side is resolving the underlying problem. This project is a workaround until one of them does.
 
-A Cloudflare Worker that proxies requests to the Ahrefs remote MCP server, injecting your MCP key so Claude.ai (and any other MCP client) can access all 95+ Ahrefs tools.
+A Cloudflare Worker that proxies requests to the Ahrefs remote MCP server, injecting your MCP key so Claude.ai (and any other MCP client) can reliably access all 95+ Ahrefs tools.
 
 Works on **all paid Ahrefs plans** (Lite, Standard, Advanced, Enterprise). No Enterprise subscription required.
 
@@ -10,19 +10,33 @@ Works on **all paid Ahrefs plans** (Lite, Standard, Advanced, Enterprise). No En
 
 Ahrefs has a remote MCP server at `api.ahrefs.com/mcp/mcp` — 95+ tools covering Site Explorer, Keywords Explorer, Brand Radar, Site Audit, Rank Tracker, batch analysis, and more.
 
-Claude.ai has a native Ahrefs MCP connector that uses OAuth to authenticate. That OAuth flow fails:
+Ahrefs is a listed Claude connector. You can add it in Claude.ai under Settings → Integrations, authorize via OAuth, and start using it. When it works, it's great. But for many users, the OAuth flow fails:
 
 > *"There was an error connecting to the MCP server. Please check your server URL and make sure your server handles auth correctly."*
 
-**The root cause:** The [MCP spec](https://spec.modelcontextprotocol.io/specification/2025-03-26/basic/authorization/) defines OAuth 2.1 as the standard auth mechanism for remote MCP servers. Claude.ai follows this and attempts an OAuth handshake when connecting. The Ahrefs MCP server uses simple Bearer token auth (their "MCP Key") — no OAuth discovery endpoint, no authorization URL, no token exchange. The handshake fails because the two sides speak different auth protocols.
+### What's Going Wrong with the OAuth
 
-Ahrefs could fix this by adding OAuth 2.1 support to their MCP endpoint. Claude could fix this by supporting a simple "pass this Bearer token" mode for servers that don't implement OAuth. Neither is doing so. This is the same issue [Suganthan Mohanadasan documented](https://suganthan.com/blog/ahrefs-mcp-server-manus-skill/) with Manus.
+The Ahrefs MCP server supports OAuth and has a working implementation. Claude.ai has an approved Ahrefs connector that uses it. The issue is in the reliability of the OAuth handshake between the two systems. The most likely failure points:
 
-**How the proxy fixes it:** Claude.ai connects to your Worker as an open MCP server — no auth required on Claude's side, so no OAuth handshake happens. The Worker then adds your Ahrefs MCP key as a Bearer token and forwards everything to Ahrefs. Claude never talks to Ahrefs directly, so the OAuth problem never occurs.
+- **Token refresh** — OAuth access tokens expire. When Claude.ai attempts to refresh an expired token and the refresh fails (expired refresh token, timing issue, or the refresh request being rejected), the connection breaks. This would explain why the connector works initially and then stops.
+- **Session/token mismatch** — MCP uses `Mcp-Session-Id` headers for session continuity. If the OAuth token gets rotated mid-session but the session state on Ahrefs' side is still tied to the old token, subsequent requests fail with 401s.
+- **Claude's connector proxy layer** — Claude.ai doesn't talk to Ahrefs directly. There's an intermediary connector/proxy layer that handles OAuth, stores tokens, and forwards MCP requests. If that layer has bugs in token storage or refresh logic, the failures would be intermittent and hard to reproduce — which matches what users experience.
+
+Without access to both systems' logs, the exact cause is hard to pin down. What's clear is that it's an integration issue between the two platforms, not a problem with either the Ahrefs MCP server or the Ahrefs API itself.
+
+Ahrefs documents a [Bearer token workaround](https://docs.ahrefs.com/reference/mcp-setup-guides) (Method 2 in their Claude setup guide) using `mcp-remote` in the Claude Desktop config. That works for **Claude Desktop** but not for **Claude.ai on the web**, which is where most people hit this problem.
+
+This is the same class of issue [Suganthan Mohanadasan documented](https://suganthan.com/blog/ahrefs-mcp-server-manus-skill/) with Manus — the MCP client's auth layer failing to properly pass credentials to the Ahrefs server.
+
+### How the Proxy Fixes It
+
+This Cloudflare Worker bypasses OAuth entirely. Claude.ai connects to your Worker as an unauthenticated MCP server — no OAuth handshake happens. The Worker then adds your Ahrefs MCP key as a Bearer token and forwards everything to Ahrefs. Claude never talks to Ahrefs directly, so the flaky OAuth flow is removed from the equation.
 
 ```
 Claude.ai ──(no auth)──▶ Cloudflare Worker ──(Bearer token)──▶ Ahrefs MCP Server
 ```
+
+Same data, same 95+ tools, reliable auth every time.
 
 ## MCP Key vs API v3 Key
 
@@ -108,7 +122,7 @@ The Cloudflare Worker is a thin HTTP proxy (~50 lines of TypeScript):
 3. Forwards the request to `https://api.ahrefs.com/mcp/mcp`, including `Content-Type`, `Accept`, and `Mcp-Session-Id` headers
 4. Streams the response back to the client
 
-No data transformation, no caching, no state, no MCP SDK needed. It's a pass-through that solves the auth mismatch.
+No data transformation, no caching, no state, no MCP SDK needed. It's a pass-through that removes the unreliable OAuth layer from the equation.
 
 ## Project Structure
 
@@ -136,7 +150,7 @@ ahrefs-mcp-proxy/
 
 ## Background
 
-Inspired by [Suganthan Mohanadasan's post](https://suganthan.com/blog/ahrefs-mcp-server-manus-skill/) on solving the same OAuth/Bearer token mismatch with the Ahrefs MCP server in Manus. His approach was a Python skill for Manus. This takes the same idea and implements it as a Cloudflare Worker for Claude.ai and any other MCP client.
+Inspired by [Suganthan Mohanadasan's post](https://suganthan.com/blog/ahrefs-mcp-server-manus-skill/) on solving a similar auth issue with the Ahrefs MCP server in Manus. His approach was a Python skill that calls the Ahrefs MCP server directly, bypassing the Manus connector layer. This takes the same idea and implements it as a Cloudflare Worker for Claude.ai and any other MCP client.
 
 ## License
 
