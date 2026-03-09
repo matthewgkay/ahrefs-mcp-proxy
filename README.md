@@ -46,8 +46,8 @@ Go to [app.ahrefs.com/user/api-access](https://app.ahrefs.com/user/api-access). 
 ### 2. Deploy the Cloudflare Worker
 
 ```bash
-git clone https://github.com/your-username/ahrefs-mcp.git
-cd ahrefs-mcp
+git clone https://github.com/matthewgkay/ahrefs-mcp-proxy.git
+cd ahrefs-mcp-proxy
 npm install
 npx wrangler secret put AHREFS_MCP_KEY
 # Paste your MCP key when prompted
@@ -113,12 +113,14 @@ No data transformation, no caching, no state, no MCP SDK needed. It's a pass-thr
 ## Project Structure
 
 ```
-ahrefs-mcp/
+ahrefs-mcp-proxy/
 ├── src/
 │   └── index.ts          ← Cloudflare Worker (~50 lines)
 ├── wrangler.toml         ← Worker configuration
 ├── package.json
+├── package-lock.json
 ├── tsconfig.json
+├── LICENSE
 └── README.md
 ```
 
