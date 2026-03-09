@@ -16,7 +16,7 @@ Claude.ai has a native Ahrefs MCP connector that uses OAuth to authenticate. Tha
 
 **The root cause:** The [MCP spec](https://spec.modelcontextprotocol.io/specification/2025-03-26/basic/authorization/) defines OAuth 2.1 as the standard auth mechanism for remote MCP servers. Claude.ai follows this and attempts an OAuth handshake when connecting. The Ahrefs MCP server uses simple Bearer token auth (their "MCP Key") — no OAuth discovery endpoint, no authorization URL, no token exchange. The handshake fails because the two sides speak different auth protocols.
 
-Ahrefs could fix this by adding OAuth 2.1 support to their MCP endpoint. Claude could fix this by supporting a simple "pass this Bearer token" mode for servers that don't implement OAuth. Neither is doing so. This is the same issue [Suganthan Mohanadasan documented](https://suganthan.com/blog/ahrefs-mcp-server-manus/) with Manus.
+Ahrefs could fix this by adding OAuth 2.1 support to their MCP endpoint. Claude could fix this by supporting a simple "pass this Bearer token" mode for servers that don't implement OAuth. Neither is doing so. This is the same issue [Suganthan Mohanadasan documented](https://suganthan.com/blog/ahrefs-mcp-server-manus-skill/) with Manus.
 
 **How the proxy fixes it:** Claude.ai connects to your Worker as an open MCP server — no auth required on Claude's side, so no OAuth handshake happens. The Worker then adds your Ahrefs MCP key as a Bearer token and forwards everything to Ahrefs. Claude never talks to Ahrefs directly, so the OAuth problem never occurs.
 
@@ -134,7 +134,7 @@ ahrefs-mcp/
 
 ## Background
 
-Inspired by [Suganthan Mohanadasan's post](https://suganthan.com/blog/ahrefs-mcp-server-manus/) on solving the same OAuth/Bearer token mismatch with the Ahrefs MCP server in Manus. His approach was a Python skill for Manus. This takes the same idea and implements it as a Cloudflare Worker for Claude.ai and any other MCP client.
+Inspired by [Suganthan Mohanadasan's post](https://suganthan.com/blog/ahrefs-mcp-server-manus-skill/) on solving the same OAuth/Bearer token mismatch with the Ahrefs MCP server in Manus. His approach was a Python skill for Manus. This takes the same idea and implements it as a Cloudflare Worker for Claude.ai and any other MCP client.
 
 ## License
 
