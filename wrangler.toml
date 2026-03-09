@@ -1,0 +1,7 @@
+name = "ahrefs-mcp"
+main = "src/index.ts"
+compatibility_date = "2025-04-01"
+compatibility_flags = ["nodejs_compat"]
+
+# AHREFS_MCP_KEY is stored as a secret:
+#   npx wrangler secret put AHREFS_MCP_KEY
